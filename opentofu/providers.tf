@@ -41,5 +41,5 @@ provider "infisical" {
 data "infisical_secrets" "common_secrets" {
   env_slug     = "dev"
   workspace_id = var.workspace_id
-  folder_path  = "/"
+  folder_path  = "/tofu/"
 }
