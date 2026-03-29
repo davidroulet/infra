@@ -8,3 +8,6 @@
 .env
 .envrc
 **/ansible-user
+
+providers
+.terraform/
