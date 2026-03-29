@@ -1,0 +1,26 @@
+---
+- name: Test Basique Infisical
+  hosts: localhost
+  connection: local
+
+  tasks:
+    - name: Login to Infisical
+      infisical.vault.login:
+        url: "https://eu.infisical.com"
+        auth_method: universal_auth
+        universal_auth_client_id: "738a7131-38ca-4444-bdfb-fdc39afcdf1c"
+        universal_auth_client_secret: "f0aa4010a17ae9d12a36dcbf7ea11e9852d4e635da150b897a08c3679c1b7540"
+      register: infisical_login
+
+    - name: Read secrets using cached login
+      infisical.vault.read_secrets:
+        login_data: "{{ infisical_login.login_data }}"
+        project_id: "0dee533b-ff34-4b06-ace5-9f93edd22369"
+        env_slug: "dev"
+        path: "/"
+        as_dict: true
+      register: secrets
+
+    - name: Use the secrets
+      debug:
+        msg: "Database URL is {{ secrets.secrets.test01 }}"

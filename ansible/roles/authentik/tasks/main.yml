@@ -1,0 +1,23 @@
+- name: S'assurer que le dossier de configuration existe
+  file:
+    path: /opt/authentik
+    state: directory
+    mode: '0755'
+
+- name: Déployer le fichier .env
+  template:
+    src: authentik.env.j2
+    dest: /opt/authentik/.env
+    mode: '0600'
+
+- name: Transférer le fichier Docker Compose 
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/authentik/docker-compose.yml
+    mode: '0644'
+
+- name: Lancer le projet avec Docker Compose V2
+  community.docker.docker_compose_v2:
+    project_src: /opt/authentik
+    state: present
+    wait: true

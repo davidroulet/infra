@@ -1,0 +1,13 @@
+api:
+  dashboard: true
+  insecure: true # Dashboard accessible sur le port 8080 pour le debug
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:            # Ajout du point d'entrée HTTPS
+    address: ":443"
+providers:
+  file:
+    directory: /etc/traefik/conf.d
+    watch: true

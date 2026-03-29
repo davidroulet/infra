@@ -1,0 +1,10 @@
+## pour terraform
+
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+*.tfstate.lock.hcl
+*.tfvars
+.env
+.envrc
+**/ansible-user

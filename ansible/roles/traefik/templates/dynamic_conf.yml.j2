@@ -1,0 +1,54 @@
+tls:
+  certificates:
+    - certFile: /etc/traefik/certs/local.crt
+      keyFile: /etc/traefik/certs/local.key
+
+
+http:
+  routers:
+    auth-router:
+      rule: "Host(`auth.sureau.ch`)"
+      service: auth-service
+      entryPoints:
+        - web
+        - websecure
+      tls: {}
+    cloud-router:
+      rule: "Host(`cloud.sureau.ch`)"
+      service: cloud-service
+      entryPoints:
+        - web
+        - websecure
+      tls: {}
+    crm-router:
+      rule: "Host(`crm.sureau.ch`)"
+      service: crm-service
+      entryPoints:
+        - web
+        - websecure
+      tls: {}
+    rp-router:
+      rule: "Host(`rp.sureau.ch`)"
+      service: rp-service
+      entryPoints:
+        - web
+        - websecure
+      tls: {}
+
+  services:
+    auth-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.10.33:80"
+    cloud-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.10.36:80"
+    crm-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.10.31:80"
+    rp-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.10.26:80"

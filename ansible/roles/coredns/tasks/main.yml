@@ -1,0 +1,77 @@
+---
+- name: Installer CoreDNS
+  vars:
+    coredns_version: "1.11.1"
+
+- name: Créer le dossier de configuration
+  file:
+    path: /etc/coredns
+    state: directory
+    mode: '0755'
+
+- name: Installer les dépendances
+  apt:
+    name: [tar, curl]
+    state: present
+
+- name: Télécharger et extraire CoreDNS
+  unarchive:
+    src: "https://github.com/coredns/coredns/releases/download/v{{ coredns_version }}/coredns_{{ coredns_version }}_linux_amd64.tgz"
+    dest: "/usr/local/bin"
+    remote_src: yes
+    creates: "/usr/local/bin/coredns" 
+
+- name: Déployer le Corefile
+  copy:
+    dest: /etc/coredns/Corefile
+    content: |
+      sureau.ch {
+          file /etc/coredns/db.sureau.ch sureau.ch
+          log
+          errors
+      }
+      . {
+          forward . 1.1.1.1
+          cache 30
+      }
+  notify: restart coredns
+
+- name: Déployer la zone DNS 
+  template:
+    src: db.sureau.ch.j2
+    dest: /etc/coredns/db.sureau.ch
+  notify: restart coredns
+
+- name: Libérer le port 53 (Désactiver systemd-resolved)
+  systemd:
+    name: systemd-resolved
+    state: stopped
+    enabled: no
+  ignore_errors: yes
+
+- name: Créer le service systemd
+  copy:
+    dest: /etc/systemd/system/coredns.service
+    content: |
+      [Unit]
+      Description=CoreDNS Service
+      After=network.target
+
+      [Service]
+      PermissionsStartOnly=true
+      ExecStart=/usr/local/bin/coredns -conf /etc/coredns/Corefile
+      Restart=always
+      Capabilities=CAP_NET_BIND_SERVICE+ep
+      AmbientCapabilities=CAP_NET_BIND_SERVICE
+      StandardOutput=append:/var/log/coredns.log
+      StandardError=append:/var/log/coredns.log
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Démarrer CoreDNS
+  systemd:
+    name: coredns
+    state: started
+    enabled: yes
+    daemon_reload: yes

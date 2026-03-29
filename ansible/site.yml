@@ -1,0 +1,33 @@
+---
+
+- name: Configuration de base
+  hosts: proxmox_vms
+  become: yes
+  roles:
+    - common
+
+- name: Configuration DNS
+  hosts: dns.sureau.ch
+  become: yes
+  roles:
+    - coredns
+
+- name: Configuration docker
+  hosts: docker.sureau.ch
+  become: yes
+  roles:
+    - docker
+
+- name: Configuration RP
+  hosts: reverse-proxy.sureau.ch
+  become: yes
+  roles:
+    - docker
+    - traefik
+
+- name: Configuration Authentik
+  hosts: auth.sureau.ch
+  become: yes
+  roles:
+    - docker
+    - authentik

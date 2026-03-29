@@ -1,0 +1,65 @@
+---
+- name: Installer Docker (dépendance pour Traefik)
+  include_role:
+    name: docker
+
+- name: Créer les dossiers de config Traefik
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /etc/traefik
+    - /etc/traefik/conf.d
+
+- name: Copier la configuration statique (traefik.yml)
+  template:
+    src: traefik.yml.j2
+    dest: /etc/traefik/traefik.yml
+
+
+- name: Déployer la configuration dynamique générée par Terraform
+  copy: 
+    src: ../templates/dynamic_conf.yml.j2
+    dest: /etc/traefik/conf.d/dynamic_conf.yml
+
+### staging
+
+- name: Créer les dossiers de config Traefik
+  file:
+    path: "/etc/traefik/certs"
+    state: directory
+    mode: '0755'
+
+- name: Copier les certificats locaux
+  copy:
+    src: "{{ playbook_dir }}/dev/{{ item }}"
+    dest: "/etc/traefik/certs/{{ item }}"
+    mode: '0600'
+  loop:
+    - local.crt
+    - local.key
+
+### staging
+
+- name: Créer et lancer le conteneur Traefik
+  community.docker.docker_container:
+    name: traefik
+    image: traefik:v3.0
+    state: started
+    docker_host: "unix:///var/run/docker.sock"
+    restart_policy: always
+    # "network_mode: host" remplace la section ports
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/traefik:/etc/traefik
+    # Les arguments de la commande Traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.file.directory=/etc/traefik/conf.d"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    # Optionnel : force le redémarrage si l'image a changé sur le registry
+    pull: true
