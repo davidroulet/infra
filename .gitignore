@@ -11,3 +11,5 @@
 
 providers
 .terraform/
+credentials.yml
+*credentials.yml

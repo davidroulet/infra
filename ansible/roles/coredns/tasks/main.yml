@@ -1,8 +1,4 @@
 ---
-- name: Installer CoreDNS
-  vars:
-    coredns_version: "1.11.1"
-
 - name: Créer le dossier de configuration
   file:
     path: /etc/coredns
@@ -19,7 +15,10 @@
     src: "https://github.com/coredns/coredns/releases/download/v{{ coredns_version }}/coredns_{{ coredns_version }}_linux_amd64.tgz"
     dest: "/usr/local/bin"
     remote_src: yes
-    creates: "/usr/local/bin/coredns" 
+    creates: "/usr/local/bin/coredns"
+  vars:
+    coredns_version: "1.11.1"
+
 
 - name: Déployer le Corefile
   copy:

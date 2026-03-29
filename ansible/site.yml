@@ -1,4 +1,38 @@
 ---
+## load up creaditencial
+
+- name: Recuperation des secrets Infisical
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars_files:
+    - credentials.yml
+  tasks:
+    - name: Connexion a Infisical
+      infisical.vault.login:
+        url: "https://eu.infisical.com"
+        auth_method: universal_auth
+        universal_auth_client_id: "{{ client_id }}"
+        universal_auth_client_secret: "{{ client_secret }}"
+      register: infisical_login
+      no_log: true
+
+    - name: Lecture des secrets (Env Dev)
+      infisical.vault.read_secrets:
+        login_data: "{{ infisical_login.login_data }}"
+        project_id: "{{ workspace_id }}"
+        env_slug: "dev"
+        path: /
+      register: infisical_secrets
+      no_log: true
+
+    - name: Exposer les secrets globalement
+      set_fact:
+        secrets: "{{ infisical_secrets.secrets }}"
+      no_log: true
+
+
+
 
 - name: Configuration de base
   hosts: proxmox_vms
