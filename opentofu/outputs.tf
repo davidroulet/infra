@@ -9,7 +9,8 @@ locals {
     proxmox_virtual_environment_vm.auth,
     proxmox_virtual_environment_vm.reverse-proxy,
     proxmox_virtual_environment_vm.crm-oroboros,
-    proxmox_virtual_environment_vm.crm-phenomen
+    proxmox_virtual_environment_vm.crm-phenomen,
+    proxmox_virtual_environment_vm.dev-mon
   ]
 }
 

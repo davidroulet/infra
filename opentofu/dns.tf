@@ -1,16 +1,20 @@
 locals {
-  sites_web = {
-    "crm"   = "192.168.10.31"
-    "cloud" = "192.168.10.36"
-    "rp"  = "192.168.10.26"
-    "auth" = "192.168.10.33"
+  # 1. Toujours des accolades { } pour chaque valeur
+  sites_publics = {
   }
-    internal_dns = {
-    "pve01" = "192.168.10.91"      
+
+  # 2. Ici aussi, on transforme l'IP simple en objet
+  sites_prives_rp = {
+    "mon" = { ip = "192.168.10.98", port = 3000}
+    "pve01" = { ip = "192.168.10.91", port = 8006, proto = "https" }
+  }
+
+  # 3. Pareil pour le DNS direct
+  dns_direct = {
   }
 }
 
-
+# --- Génération du fichier CoreDNS ---
 resource "local_file" "coredns_zone" {
   filename = "../ansible/roles/coredns/templates/db.sureau.ch.j2"
   content  = <<EOT
@@ -21,18 +25,20 @@ $ORIGIN sureau.ch.
 dns     IN A   192.168.10.28
 traefik IN A   192.168.10.26
 
-; Sites vers le Reverse Proxy
-%{ for name, ip in local.sites_web ~}
+; --- Services passant par le Reverse Proxy ---
+%{ for name, config in merge(local.sites_publics, local.sites_prives_rp) ~}
 ${name} IN A   192.168.10.26
 %{ endfor ~}
-; Sites vers l ip
-%{ for name, ip in local.internal_dns ~}
-${name} IN A   ${ip}
-%{ endfor ~}
 
+; --- Services en accès direct ---
+%{ for name, config in local.dns_direct ~}
+${name} IN A   ${config.ip}
+%{ endfor ~}
 EOT
 }
 
+
+# --- Génération de la conf Traefik  ---
 resource "local_file" "traefik_dynamic_conf" {
   filename = "../ansible/roles/traefik/templates/dynamic_conf.yml.j2"
   content  = <<EOT
@@ -41,34 +47,39 @@ tls:
     - certFile: /etc/traefik/certs/local.crt
       keyFile: /etc/traefik/certs/local.key
 
-
 http:
+  # On définit le transport pour ignorer les certificats auto-signés internes
+  serversTransports:
+    ignore-ssl:
+      insecureSkipVerify: true
+
   routers:
-%{ for name, ip in local.sites_web ~}
+%{ for name, config in merge(local.sites_publics, local.sites_prives_rp) ~}
     ${name}-router:
       rule: "Host(`${name}.sureau.ch`)"
       service: ${name}-service
-      entryPoints:
-        - web
-        - websecure
+      entryPoints: ["web", "websecure"]
       tls: {}
 %{ endfor ~}
 
   services:
-%{ for name, ip in local.sites_web ~}
+%{ for name, config in merge(local.sites_publics, local.sites_prives_rp) ~}
     ${name}-service:
       loadBalancer:
+%{ if lookup(config, "proto", "http") == "https" ~}
+        serversTransport: ignore-ssl
+%{ endif ~}
         servers:
-          - url: "http://${ip}:80"
+          - url: "${lookup(config, "proto", "http")}://${config.ip}:${lookup(config, "port", 80)}"
 %{ endfor ~}
 EOT
 }
 
-
+# --- Enregistrements Publics Infomaniak ---
 resource "infomaniak_record" "public_cnames" {
-  for_each  = local.sites_web
+  for_each  = local.sites_publics
   zone_fqdn = "sureau.ch."
   type      = "CNAME"
-  source    = "${each.key}"
-  target    = "wedelia.ch." 
+  source    = each.key
+  target    = "wedelia.ch."
 }

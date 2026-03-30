@@ -1,0 +1,252 @@
+---
+- name: Install Prometheus, Grafana, HAProxy and Proxmox PVE Exporter
+  hosts: mon
+  become: true
+
+  vars:
+    prometheus_version: "2.53.0"
+    grafana_version: "10.4.2"
+    pve_exporter_version: "3.5.5"
+
+    proxmox_api_target: "127.0.0.1"
+    proxmox_api_user: "prom@pve"
+    proxmox_api_token_name: "monitoring"
+    proxmox_api_token_value: "f4ca8d8b-5243-481b-a1d6-aad581a18989"
+
+  tasks:
+    - name: Clean up failed Grafana repo files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/grafana.list
+        - /etc/apt/keyrings/grafana.gpg
+
+    - name: Force apt update after cleanup
+      apt:
+        update_cache: yes
+
+    - name: Install dependencies
+      apt:
+        name:
+          - curl
+          - gnupg
+          - adduser
+          - libfontconfig1
+          - python3
+          - python3-pip
+          - python3-venv
+          - haproxy
+        state: present
+
+    - name: Create Prometheus user
+      user:
+        name: prometheus
+        system: yes
+        shell: /usr/sbin/nologin
+
+    - name: Create Prometheus directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: prometheus
+        group: prometheus
+        mode: "0755"
+      loop:
+        - /etc/prometheus
+        - /var/lib/prometheus
+
+    - name: Download and unpack Prometheus
+      unarchive:
+        src: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+        dest: /tmp/
+        remote_src: yes
+
+    - name: Copy Prometheus binaries
+      copy:
+        src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+        remote_src: yes
+      loop:
+        - prometheus
+        - promtool
+
+    - name: Create HAProxy config for Proxmox API
+      copy:
+        dest: /etc/haproxy/haproxy.cfg
+        mode: "0644"
+        content: |
+          global
+              log /dev/log local0
+              log /dev/log local1 notice
+              daemon
+              maxconn 256
+
+          defaults
+              log global
+              mode tcp
+              option tcplog
+              timeout connect 5s
+              timeout client 30s
+              timeout server 30s
+
+          frontend proxmox_front
+              bind 127.0.0.1:8006
+              default_backend proxmox_back
+
+          backend proxmox_back
+              balance roundrobin
+              option tcp-check
+              server pve01 192.168.10.91:8006 check
+              server pve02 192.168.10.87:8006 check
+              server pve03 192.168.10.93:8006 check
+
+    - name: Create pve_exporter user
+      user:
+        name: pve_exporter
+        system: yes
+        shell: /usr/sbin/nologin
+        create_home: yes
+        home: /opt/pve_exporter
+
+    - name: Create pve_exporter directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: pve_exporter
+        group: pve_exporter
+        mode: "0755"
+      loop:
+        - /opt/pve_exporter
+        - /etc/pve_exporter
+
+    - name: Create Python virtualenv for pve_exporter
+      command: python3 -m venv /opt/pve_exporter/venv
+      args:
+        creates: /opt/pve_exporter/venv/bin/activate
+
+    - name: Install pve_exporter in virtualenv
+      pip:
+        name: "prometheus-pve-exporter=={{ pve_exporter_version }}"
+        virtualenv: /opt/pve_exporter/venv
+        state: present
+
+    - name: Create pve_exporter config
+      copy:
+        dest: /etc/pve_exporter/pve.yml
+        owner: pve_exporter
+        group: pve_exporter
+        mode: "0600"
+        content: |
+          default:
+            user: {{ proxmox_api_user }}
+            token_name: {{ proxmox_api_token_name }}
+            token_value: {{ proxmox_api_token_value }}
+            verify_ssl: false
+
+    - name: Create systemd service for pve_exporter
+      copy:
+        dest: /etc/systemd/system/pve_exporter.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Prometheus Proxmox VE Exporter
+          After=network-online.target haproxy.service
+          Wants=network-online.target
+          Requires=haproxy.service
+
+          [Service]
+          User=pve_exporter
+          Group=pve_exporter
+          WorkingDirectory=/opt/pve_exporter
+          ExecStart=/opt/pve_exporter/venv/bin/pve_exporter --config.file /etc/pve_exporter/pve.yml --web.listen-address 0.0.0.0:9221
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Configure Prometheus
+      copy:
+        dest: /etc/prometheus/prometheus.yml
+        owner: prometheus
+        group: prometheus
+        mode: "0644"
+        content: |
+          global:
+            scrape_interval: 15s
+
+          scrape_configs:
+            - job_name: 'prometheus'
+              static_configs:
+                - targets: ['localhost:9090']
+
+            - job_name: 'proxmox'
+              metrics_path: /pve
+              params:
+                module: [default]
+              static_configs:
+                - targets:
+                    - '192.168.10.91'
+                    - '192.168.10.87'
+                    - '192.168.10.93'
+              relabel_configs:
+                - source_labels: [__address__]
+                  target_label: __param_target
+                - source_labels: [__param_target]
+                  target_label: instance
+                - target_label: __address__
+                  replacement: localhost:9221
+            - job_name: 'node_exporter'
+              static_configs:
+                - targets:
+                    - '192.168.10.28:9100'
+                    - '192.168.10.38:9100'
+                    - '192.168.10.39:9100'
+                    - '192.168.10.36:9100'
+                    - '192.168.10.31:9100'
+                    - '192.168.10.33:9100'
+                    - '192.168.10.26:9100'
+                    - '192.168.10.22:9100'
+                    - '192.168.10.16:9100'
+                    - '192.168.10.98:9100'
+    - name: Create Prometheus systemd service
+      copy:
+        dest: /etc/systemd/system/prometheus.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Prometheus
+          After=network.target
+
+          [Service]
+          User=prometheus
+          Group=prometheus
+          ExecStart=/usr/local/bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/var/lib/prometheus
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Download Grafana DEB
+      get_url:
+        url: "https://dl.grafana.com/oss/release/grafana_{{ grafana_version }}_amd64.deb"
+        dest: /tmp/grafana.deb
+        mode: "0644"
+
+    - name: Install Grafana package
+      apt:
+        deb: /tmp/grafana.deb
+
+    - name: Enable and restart services
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+      loop:
+        - haproxy
+        - prometheus
+        - pve_exporter
+        - grafana-server

@@ -386,6 +386,45 @@ resource "proxmox_virtual_environment_vm" "crm-phenomen" {
 }
 
 
+################################################################################################33
+resource "proxmox_virtual_environment_vm" "dev-mon" {
+  name            = "mon"
+  description     = "Managed by Terraform"
+  tags            = ["terraform", "debian", "staging"]
+  node_name       = "pve-opel"
+  vm_id           = 9999
+  keyboard_layout = "fr-ch"
+  agent {
+    enabled = true
+  }
+  cpu {
+    cores = 2
+    type  = "x86-64-v2-AES" # recommended for modern CPUs
+  }
+  memory {
+    dedicated = 2048
+    floating  = 2048 # set equal to dedicated to enable ballooning
+  }
+  disk {
+    datastore_id = proxmox_virtual_environment_storage_nfs.iso-repo.id
+    import_from  = proxmox_virtual_environment_download_file.debian_13_trixie_qcow2_img.id
+    interface    = "scsi0"
+  }
+  initialization {
+    datastore_id = proxmox_virtual_environment_storage_nfs.iso-repo.id
+    ip_config {
+      ipv4 {
+        address = "192.168.10.98/24"
+        gateway = "192.168.10.1"
+      }
+    }
+    user_data_file_id = "isonfs:snippets/cloud-config-ansible.yaml"
+  }
+  network_device {
+    bridge = "vmbr0"
+    model  = "virtio" # Recommandé pour Debian/Linux
+  }
+}
 
 
 

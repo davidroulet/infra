@@ -1,15 +1,12 @@
 $ORIGIN sureau.ch.
-@       3600 IN SOA dns.sureau.ch. admin.sureau.ch. ( 2026032922 7200 3600 1209600 3600 )
+@       3600 IN SOA dns.sureau.ch. admin.sureau.ch. ( 2026033002 7200 3600 1209600 3600 )
 @       3600 IN NS  dns.sureau.ch.
 
 dns     IN A   192.168.10.28
 traefik IN A   192.168.10.26
 
-; Sites vers le Reverse Proxy
-auth IN A   192.168.10.26
-cloud IN A   192.168.10.26
-crm IN A   192.168.10.26
-rp IN A   192.168.10.26
-; Sites vers l ip
-pve01 IN A   192.168.10.91
+; --- Services passant par le Reverse Proxy ---
+mon IN A   192.168.10.26
+pve01 IN A   192.168.10.26
 
+; --- Services en accès direct ---
